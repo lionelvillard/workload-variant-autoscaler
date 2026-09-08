@@ -51,12 +51,12 @@
       },
       "targets": [
         {
-          "expr": "vllm:kv_cache_usage_perc{namespace=~\"$namespace\"}",
+          "expr": "vllm:kv_cache_usage_perc{namespace=~\"$namespace\"} * on (pod, namespace) group_left(label_llmdbench_ai_session_id) kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}",
           "legendFormat": "{{pod}}",
           "refId": "A"
         },
         {
-          "expr": "avg(vllm:kv_cache_usage_perc{namespace=~\"$namespace\"})",
+          "expr": "avg(vllm:kv_cache_usage_perc{namespace=~\"$namespace\"} * on (pod, namespace) group_left(label_llmdbench_ai_session_id) kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})",
           "legendFormat": "avg",
           "refId": "B"
         }
@@ -87,12 +87,12 @@
       },
       "targets": [
         {
-          "expr": "vllm:num_requests_waiting{namespace=~\"$namespace\"}",
+          "expr": "vllm:num_requests_waiting{namespace=~\"$namespace\"} * on (pod, namespace) group_left(label_llmdbench_ai_session_id) kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}",
           "legendFormat": "{{pod}} waiting",
           "refId": "A"
         },
         {
-          "expr": "vllm:num_requests_running{namespace=~\"$namespace\"}",
+          "expr": "vllm:num_requests_running{namespace=~\"$namespace\"} * on (pod, namespace) group_left(label_llmdbench_ai_session_id) kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}",
           "legendFormat": "{{pod}} running",
           "refId": "B"
         }
@@ -106,10 +106,30 @@
     "list": [
       {
         "name": "namespace",
-        "type": "textbox",
+        "type": "query",
         "label": "Namespace",
-        "query": ".*",
-        "current": { "value": ".*", "text": ".*" }
+        "datasource": { "type": "prometheus" },
+        "query": { "query": "label_values(vllm:num_requests_running, namespace)", "refId": "namespace" },
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "value": "$__all", "text": "All" }
+      },
+      {
+        "name": "session_id",
+        "type": "query",
+        "label": "Session ID",
+        "description": "llmdbench.ai/session-id pod label, joined onto the panels below via kube_pod_labels (see docs/grafana-reports.md). Defaults to All (no filtering); pick one session's ID to disambiguate concurrent/reused namespaces.",
+        "datasource": { "type": "prometheus" },
+        "query": { "query": "label_values(kube_pod_labels{namespace=~\"$namespace\"}, label_llmdbench_ai_session_id)", "refId": "session_id" },
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "value": "$__all", "text": "All" }
       }
     ]
   },

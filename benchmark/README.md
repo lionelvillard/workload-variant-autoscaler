@@ -36,10 +36,12 @@ benchmark/
     │           ├── baseline.yaml         # control = recommended strategy
     │           ├── queue-aggressive.yaml # variant (<strategy>.yaml)
     │           └── kv-early.yaml          # variant
-    └── cluster-configs/      # swappable backend overlays (--cluster-config)
-        ├── vllm.yaml         #   real vLLM, GPU
-        ├── vllm-sim-qwen3-32b.yaml # real vLLM (CPU) + latency-simulation plugin (per-model)
-        └── inference-sim.yaml#   llm-d-inference-sim
+    └── cluster-configs/      # swappable backend overlays (--cluster-config), grouped by platform
+        ├── k8s/
+        │   └── inference-sim.yaml       #   llm-d-inference-sim
+        └── ocp/
+            ├── vllm.yaml                #   real vLLM, GPU
+            └── model-sim-qwen3-32b.yaml # real vLLM (CPU) + latency-simulation plugin (per-model)
 ```
 
 - **Scenarios are backend-agnostic.** A scenario describes the deployment
@@ -53,14 +55,14 @@ benchmark/
 
 ### Backend matrix
 
-| Backend (`--cluster-config`)     | Runtime                              | GPU | Metrics source        | Priority |
-|----------------------------------|--------------------------------------|-----|-----------------------|----------|
-| `cluster-configs/vllm.yaml`        | real vLLM                             | yes | native `vllm:` metrics | high     |
-| `cluster-configs/vllm-sim-qwen3-32b.yaml`    | real vLLM (CPU) + simulation plugin  | no  | native `vllm:` metrics | high     |
-| `cluster-configs/inference-sim.yaml`| llm-d-inference-sim (fake server)   | no  | native `vllm:` metrics | low      |
+| Backend (`--cluster-config`)                | Runtime                              | GPU | Metrics source        | Priority |
+|----------------------------------------------|--------------------------------------|-----|-----------------------|----------|
+| `cluster-configs/ocp/vllm.yaml`               | real vLLM                             | yes | native `vllm:` metrics | high     |
+| `cluster-configs/ocp/model-sim-qwen3-32b.yaml`| real vLLM (CPU) + simulation plugin  | no  | native `vllm:` metrics | high     |
+| `cluster-configs/k8s/inference-sim.yaml`      | llm-d-inference-sim (fake server)   | no  | native `vllm:` metrics | low      |
 
-`vllm` and `vllm-sim-*` are the priority pair (the `vllm-sim` overlay is
-per-model, e.g. `vllm-sim-qwen3-32b.yaml`). All three expose native `vllm:`
+`vllm` and `model-sim-*` are the priority pair (the `model-sim` overlay is
+per-model, e.g. `model-sim-qwen3-32b.yaml`). All three expose native `vllm:`
 metrics, so the scenario's scaling strategy applies unchanged across backends.
 
 > Note: `--cluster-config` is a single-use flag that upstream documents for
@@ -97,7 +99,8 @@ Run an experiment exactly like a guide, pointing `--spec` at its `.j2`:
 ```bash
 llmdbenchmark standup \
   --spec benchmark/config/specification/staging/pd-disaggregation/queue-aggressive.yaml.j2 \
-  --cluster-config benchmark/config/cluster-configs/vllm-sim-qwen3-32b.yaml \
+  --cluster-config benchmark/config/cluster-configs/ocp/model-sim-qwen3-32b.yaml \
+  --workspace benchmark/results \
   -p <namespace>
 ```
 
@@ -163,26 +166,34 @@ Pick a specification (`guides/` or `staging/`) and a backend overlay. Run
 # Standup — vLLM-CPU-sim backend (no GPU)
 llmdbenchmark standup \
   --spec benchmark/config/specification/guides/pd-disaggregation.yaml.j2 \
-  --cluster-config benchmark/config/cluster-configs/vllm-sim-qwen3-32b.yaml \
+  --cluster-config benchmark/config/cluster-configs/ocp/model-sim-qwen3-32b.yaml \
+  --workspace benchmark/results \
   -p <namespace>
 
 # Run
 llmdbenchmark run \
   --spec benchmark/config/specification/guides/pd-disaggregation.yaml.j2 \
-  --cluster-config benchmark/config/cluster-configs/vllm-sim-qwen3-32b.yaml \
+  --cluster-config benchmark/config/cluster-configs/ocp/model-sim-qwen3-32b.yaml \
+  --workspace benchmark/results \
   -p <namespace> -l inference-perf -w guide_pd-disaggregation_1.yaml
 
 # Teardown
 llmdbenchmark teardown \
   --spec benchmark/config/specification/guides/pd-disaggregation.yaml.j2 \
-  --cluster-config benchmark/config/cluster-configs/vllm-sim-qwen3-32b.yaml \
+  --cluster-config benchmark/config/cluster-configs/ocp/model-sim-qwen3-32b.yaml \
+  --workspace benchmark/results \
   -p <namespace>
 ```
 
 Swap the `--cluster-config` value to target a different backend (e.g.
-`.../cluster-configs/inference-sim.yaml` or, on a GPU cluster,
-`.../cluster-configs/vllm.yaml`). Use `--dry-run` / `-n` to preview what would be
+`.../cluster-configs/k8s/inference-sim.yaml` or, on a GPU cluster,
+`.../cluster-configs/ocp/vllm.yaml`). Use `--dry-run` / `-n` to preview what would be
 applied without touching the cluster.
+
+`--workspace benchmark/results` keeps every session under a single repo-local
+directory (`benchmark/results/<user>-<timestamp>/`) instead of scattering
+them across the filesystem in temp dirs. Pass the same value to every command
+in a lifecycle (standup/smoketest/run/teardown).
 
 ### Verifying composition without a cluster
 
@@ -192,11 +203,12 @@ spec + backend overlay compose as intended before touching a cluster:
 ```bash
 llmdbenchmark standup \
   --spec benchmark/config/specification/guides/pd-disaggregation.yaml.j2 \
-  --cluster-config benchmark/config/cluster-configs/vllm-sim-qwen3-32b.yaml \
+  --cluster-config benchmark/config/cluster-configs/ocp/model-sim-qwen3-32b.yaml \
+  --workspace benchmark/results \
   -p bench --dry-run
 ```
 
-Inspect the rendered `plan/pd-disaggregation/config.yaml` under the run directory
+Inspect the rendered `plan/pd-disaggregation/config.yaml` under the session directory
 and check the backend-specific values match the chosen overlay — image,
 `accelerator.count`, resources, `initContainers`, the vLLM command, and any
 `extraObjects`. Because the harness deep-merges dicts but replaces lists wholesale,
@@ -219,8 +231,13 @@ exercised for these specs.
 
 ## Observability
 
-Each run can get a standalone HTML summary (`report.html`) with the key
-lifecycle metrics and links to Grafana panels (vLLM KV-cache utilization,
-queue size) for that run's exact time window — including a permanent
-snapshot that survives Prometheus data retention. See
-[`docs/grafana-reports.md`](docs/grafana-reports.md).
+`benchmark/hack/benchmark_report.py serve` runs an interactive dashboard,
+organized spec-first: a landing page listing every spec under
+`benchmark/config/specification/`, drilling into each spec's historical and
+in-progress sessions (with per-session stage/log status and per-experiment
+latency/goodput charts) plus a form to standup/run/teardown that spec with a
+chosen cluster-config + harness/workload, without leaving the browser. Each
+session can also get a standalone HTML summary (`report.html`) with
+links to Grafana panels (vLLM KV-cache utilization, queue size) for that
+session's benchmark-run time window, including a permanent snapshot that survives
+Prometheus data retention. See [`docs/grafana-reports.md`](docs/grafana-reports.md).

@@ -32,6 +32,7 @@ llm-d/
 llm-d-infra/
 llm-d-benchmark/
 benchmark/hack/.venv/
+benchmark/hack/.port-forward-state.json
 # llmdbenchmark workspace directories (created by benchmark runs)
 *-*-*-*-*-*/
 biran-*/

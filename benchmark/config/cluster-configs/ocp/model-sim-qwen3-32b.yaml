@@ -1,5 +1,5 @@
 # BACKEND OVERLAY — vLLM CPU + latency-simulation plugin (no GPU), Qwen3-32B on H100 SXM5
-# Apply with: --cluster-config benchmark/config/cluster-configs/vllm-sim-qwen3-32b.yaml
+# Apply with: --cluster-config benchmark/config/cluster-configs/ocp/model-sim-qwen3-32b.yaml
 #
 # Priority backend. Runs the real vLLM serving stack on CPU with the model
 # forward pass replaced by github.com/lionelvillard/vllm-simulated-model, so
@@ -29,8 +29,32 @@
 # Because this KV cache is real CPU RAM, the pod memory limit must exceed it:
 # 15 GiB KV + runtime/activation overhead => 20Gi.
 #
-# Merge note: dicts deep-merge, lists replace wholesale. This overlay never sets
-# `keda`.
+# Merge note: dicts deep-merge, lists replace wholesale. This overlay sets
+# `keda.prometheus` (connection/auth only) for OpenShift clusters where
+# Prometheus is not reachable at a plain-HTTP `monitoring` namespace — see
+# below. `keda.scaledObjects` (triggers/thresholds) still comes from the
+# scenario; this overlay never touches that list.
+#
+# KEDA PROMETHEUS AUTH (OpenShift): there is no `monitoring` namespace on
+# this cluster, and direct Prometheus access requires bearer-token auth
+# anyway, so triggers go through the Thanos Querier route instead (same
+# pattern already proven by the EPP+KEDA saturation path). The ServiceAccount
+# + ClusterRoleBinding below grant it read access to Thanos; the
+# `prometheus-auth` Secret (keys: bearerToken, ca.crt) they authenticate with
+# is NOT created here — KEDA's generic-scaledObjects path treats it as
+# user-supplied (see 27a_keda-triggerauthentication.yaml.j2 in llm-d-benchmark).
+# Create it once per namespace after standup:
+#   oc create token wva-prometheus-auth -n <namespace> --duration=24h > /tmp/tok
+#   oc get cm openshift-service-ca.crt -n <namespace> \
+#     -o jsonpath='{.data.service-ca\.crt}' > /tmp/ca.crt
+#   oc create secret generic prometheus-auth -n <namespace> \
+#     --from-file=ca.crt=/tmp/ca.crt --from-literal=bearerToken="$(cat /tmp/tok)"
+keda:
+  prometheus:
+    baseUrl: https://thanos-querier.openshift-monitoring.svc.cluster.local
+    port: 9091
+    authMode: bearer-secret
+    secretName: prometheus-auth
 
 affinity:
   enabled: true
@@ -171,7 +195,28 @@ prefill:
 
 # SimulatedForCausalLM config.json (Qwen3-32B, physics latency calibrated for
 # H100 SXM5). vLLM reads it from /model.
+#
+# ServiceAccount + ClusterRoleBinding below let KEDA's bearer-token trigger
+# read Thanos Querier (see the keda.prometheus block above). The ClusterRole
+# `allow-thanos-querier-api-access` is shared cluster infra, provisioned once
+# by an admin.
 extraObjects:
+  - apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: wva-prometheus-auth
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: allow-thanos-querier-api-access-${namespace.name}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: allow-thanos-querier-api-access
+    subjects:
+      - kind: ServiceAccount
+        name: wva-prometheus-auth
+        namespace: ${namespace.name}
   - apiVersion: v1
     kind: ConfigMap
     metadata:

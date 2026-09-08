@@ -44,6 +44,7 @@ llmd-infra/
 # commit these, unlike the rest of benchmark/results/.
 benchmark/results/*/environment/
 benchmark/results/*/setup/commands/
+benchmark/results/*/logs/
 
 *.tgz
 actionlint

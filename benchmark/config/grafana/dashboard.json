@@ -121,7 +121,7 @@
         "name": "session_id",
         "type": "query",
         "label": "Session ID",
-        "description": "llmdbench.ai/session-id pod label, joined onto the panels below via kube_pod_labels (see docs/grafana-reports.md). Defaults to All (no filtering); pick one session's ID to disambiguate concurrent/reused namespaces.",
+        "description": "llmdbench.ai/session-id pod label, joined onto the panels below via kube_pod_labels (see docs/benchmark-report.md). Defaults to All (no filtering); pick one session's ID to disambiguate concurrent/reused namespaces.",
         "datasource": { "type": "prometheus" },
         "query": { "query": "label_values(kube_pod_labels{namespace=~\"$namespace\"}, label_llmdbench_ai_session_id)", "refId": "session_id" },
         "refresh": 2,

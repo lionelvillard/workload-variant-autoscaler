@@ -275,7 +275,7 @@ venv.
 One-time: a local Grafana at `http://localhost:3000` and a port-forward to the
 cluster's Prometheus (`kubectl port-forward -n monitoring svc/prometheus-operated
 9090:9090`), then `benchmark/hack/benchmark_report.sh configure`. See
-`benchmark/docs/grafana-reports.md`.
+`benchmark/docs/benchmark-report.md`.
 
 After a benchmark run, with the port-forward still up:
 

@@ -69,7 +69,7 @@ explicit request.
    (`benchmark/results/<user>-<timestamp>/`) from each command's output.
 6. **Report** (optional): runs `benchmark/hack/benchmark_report.sh all
    <session_dir>` to render `report.html` and capture a Grafana snapshot — see
-   [`benchmark/docs/grafana-reports.md`](../../benchmark/docs/grafana-reports.md).
+   [`benchmark/docs/benchmark-report.md`](../../benchmark/docs/benchmark-report.md).
 7. **Teardown** only when you ask for it.
 
 ## Guardrails it enforces
@@ -109,7 +109,7 @@ explicit request.
 
 - [`benchmark/README.md`](../../benchmark/README.md) — directory design,
   scenario/backend model, KEDA experiment naming convention.
-- [`benchmark/docs/grafana-reports.md`](../../benchmark/docs/grafana-reports.md)
+- [`benchmark/docs/benchmark-report.md`](../../benchmark/docs/benchmark-report.md)
   — the per-session report and Grafana snapshot tooling.
 - [`benchmark-guide.md`](benchmark-guide.md) — the separate `make benchmark-*`
   WVA scaling benchmark workflow.

@@ -5,7 +5,7 @@ relevant dashboard for a session before Prometheus expires its data, render a
 standalone HTML summary report per session, and serve an interactive dashboard
 across every session (finished or in-progress) under a workspace.
 
-Grafana is expected to be installed locally (see docs/grafana-reports.md's
+Grafana is expected to be installed locally (see docs/benchmark-report.md's
 "One-time setup"). Prometheus is always reached remotely, through OpenShift's
 Thanos Querier Route -- auto-discovered against the current kube context, no
 port-forwarding needed for it. Pass --prometheus-url yourself to skip
@@ -82,7 +82,7 @@ SNAPSHOT_WINDOW_BUFFER_SECONDS = 60
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 
 # Service names ranked first in Grafana's port-forward picker regardless of which namespace
-# they turn up in -- benchmark/docs/grafana-reports.md documents these as the ones that just
+# they turn up in -- benchmark/docs/benchmark-report.md documents these as the ones that just
 # work: a plain HTTP endpoint straight onto Grafana, no auth in front.
 _PREFERRED_GRAFANA_NAMES = ("kube-prometheus-stack-grafana", "grafana")
 
@@ -194,7 +194,7 @@ def cmd_configure(args):
     # Auth Grafana -> Prometheus, not this script -> Grafana (that's user/password above).
     # Needed to reach a token-protected endpoint directly (e.g. OpenShift's Thanos Querier,
     # which merges the platform and user-workload Prometheus instances -- see "Identifying a
-    # session's metrics" in docs/grafana-reports.md for why both are required) without a
+    # session's metrics" in docs/benchmark-report.md for why both are required) without a
     # `kubectl port-forward` in front of it.
     json_data = {}
     secure_json_data = {}
@@ -298,7 +298,7 @@ def _live_dashboard_url(grafana_url, dashboard_uid, namespace, start_s, stop_s, 
     """Build a Grafana dashboard URL time-boxed to a run window and scoped to its namespace,
     so the dashboard shows only the data for that run. `session_id`, if given, is passed
     through as the `session_id` dashboard variable -- see "Identifying a session's metrics"
-    in docs/grafana-reports.md; the shipped panels don't key off it, but it's there for a
+    in docs/benchmark-report.md; the shipped panels don't key off it, but it's there for a
     panel query that's been opted into the kube_pod_labels join."""
     url = (
         f"{grafana_url.rstrip('/')}/d/{dashboard_uid}"
@@ -679,7 +679,7 @@ def cmd_all(args):
 # interactive dashboard (report.html) renders. Unlike `report`, this reads
 # no Grafana/Prometheus state -- it only inspects what's already on disk, so
 # it works for sessions that are still standing up or running, not just
-# finished ones. See docs/grafana-reports.md.
+# finished ones. See docs/interactive-dashboard.md.
 # --------------------------------------------------------------------------
 
 # Percentile keys as emitted by the inference-perf harness's
@@ -1229,7 +1229,7 @@ def _discover_services(label_selector, preferred_names, context=None):
     port-forward service picker (GET /api/port-forward/discover) so the operator can choose
     when more than one matches, or when label-based discovery misses the actual one. Ranked
     by Service *name*, not namespace: `preferred_names` sort first (the plain-HTTP endpoints
-    grafana-reports.md documents as working out of the box)."""
+    benchmark-report.md documents as working out of the box)."""
     found = {}
     result = _kubectl_run(
         ["get", "svc", "--all-namespaces", "-l", label_selector,
@@ -1273,7 +1273,7 @@ def _route_host(name, namespace, context=None):
 def discover_thanos_querier_url(context=None):
     """https://<host> for OpenShift's Thanos Querier Route in openshift-monitoring -- the
     endpoint that merges the platform and user-workload Prometheus instances (see
-    "Identifying a session's metrics" in docs/grafana-reports.md) -- or None if this isn't an
+    "Identifying a session's metrics" in docs/benchmark-report.md) -- or None if this isn't an
     OpenShift cluster with in-cluster monitoring enabled."""
     host = _route_host("thanos-querier", "openshift-monitoring", context=context)
     return f"https://{host}" if host else None
@@ -1363,7 +1363,7 @@ class ServicePortForward:
     selected from the dashboard's port-forward picker (backed by `_discover_services`) or
     entered manually. Used for both Prometheus and Grafana when either is expected on this
     machine -- see `_url_location` -- e.g. a locally-installed Grafana reaching an in-cluster
-    Prometheus (the "One-time setup" section of grafana-reports.md), or reaching an
+    Prometheus (the "One-time setup" section of benchmark-report.md), or reaching an
     in-cluster Grafana directly instead of a local install."""
 
     def __init__(self, local_port):
@@ -1945,7 +1945,7 @@ def _add_prometheus_auth_args(parser):
     """Prometheus is always reached remotely, through OpenShift's Thanos Querier: if
     --prometheus-url isn't given, it's auto-discovered (Route in openshift-monitoring, token
     minted from a ServiceAccount already bound to cluster-monitoring-view, TLS skip-verify
-    enabled) -- see resolve_remote_prometheus and docs/grafana-reports.md. Pass
+    enabled) -- see resolve_remote_prometheus and docs/benchmark-report.md. Pass
     --prometheus-url yourself to skip discovery (e.g. a plain Prometheus you've
     kubectl-port-forwarded by hand)."""
     parser.add_argument(

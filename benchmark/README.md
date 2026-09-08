@@ -236,8 +236,10 @@ organized spec-first: a landing page listing every spec under
 `benchmark/config/specification/`, drilling into each spec's historical and
 in-progress sessions (with per-session stage/log status and per-experiment
 latency/goodput charts) plus a form to standup/run/teardown that spec with a
-chosen cluster-config + harness/workload, without leaving the browser. Each
-session can also get a standalone HTML summary (`report.html`) with
+chosen cluster-config + harness/workload, without leaving the browser. See
+[`docs/interactive-dashboard.md`](docs/interactive-dashboard.md).
+
+Each session can also get a standalone HTML summary (`report.html`) with
 links to Grafana panels (vLLM KV-cache utilization, queue size) for that
 session's benchmark-run time window, including a permanent snapshot that survives
-Prometheus data retention. See [`docs/grafana-reports.md`](docs/grafana-reports.md).
+Prometheus data retention. See [`docs/benchmark-report.md`](docs/benchmark-report.md).

@@ -45,9 +45,16 @@ llmd-infra/
 benchmark/results/*/environment/
 benchmark/results/*/setup/commands/
 benchmark/results/*/logs/
+benchmark/results/*/plan/
 
 *.tgz
 actionlint
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
 # Generated TLS certificates (auto-created by e2e test setup)
 hack/tls-certs/

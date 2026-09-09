@@ -172,6 +172,33 @@ def _forget_port_forward(target, context):
 # configure
 # --------------------------------------------------------------------------
 
+# The only variables _capture_snapshot substitutes before replaying a panel's
+# expression against Prometheus. Anything else (another dashboard variable, a
+# Grafana macro such as $__rate_interval) reaches Prometheus unexpanded, and
+# the panel freezes empty in the snapshot -- see "Extending the dashboard" in
+# docs/benchmark-report.md. `$1`-style label_replace capture groups are fine:
+# Grafana leaves them alone and so do we.
+SNAPSHOT_SAFE_VARIABLES = ("namespace", "session_id")
+
+
+def _dashboard_expression_errors(dashboard):
+    """Return a list of human-readable reasons the dashboard's panel queries wouldn't
+    survive snapshot capture, empty if they all would."""
+    errors = []
+    for panel in dashboard.get("panels", []):
+        for target in panel.get("targets", []) or []:
+            expr = target.get("expr", "")
+            for variable in re.findall(r"\$(\w+)", expr):
+                if variable.isdigit() or variable in SNAPSHOT_SAFE_VARIABLES:
+                    continue
+                errors.append(
+                    f"panel {panel.get('title')!r} target {target.get('refId')}: "
+                    f"${variable} is not substituted during snapshot capture "
+                    f"(only {', '.join('$' + v for v in SNAPSHOT_SAFE_VARIABLES)} are)"
+                )
+    return errors
+
+
 def cmd_configure(args):
     err = resolve_remote_prometheus(args, context=getattr(args, "context", None))
     if err:
@@ -251,6 +278,12 @@ def cmd_configure(args):
 
     with open(DASHBOARD_JSON_PATH) as f:
         dashboard = json.load(f)
+    expr_errors = _dashboard_expression_errors(dashboard)
+    if expr_errors:
+        print(f"ERROR: {DASHBOARD_JSON_PATH} has queries that snapshots can't replay:", file=sys.stderr)
+        for e in expr_errors:
+            print(f"  - {e}", file=sys.stderr)
+        return 1
     dashboard["id"] = None
     status, result = _http(
         "POST",

@@ -246,6 +246,7 @@ chosen cluster-config + harness/workload, without leaving the browser. See
 [`docs/interactive-dashboard.md`](docs/interactive-dashboard.md).
 
 Each session can also get a standalone HTML summary (`report.html`) with
-links to Grafana panels (vLLM KV-cache utilization, queue size) for that
-session's benchmark-run time window, including a permanent snapshot that survives
+links to Grafana panels for that session's benchmark-run time window --
+vLLM engine metrics, llm-d EPP (router) metrics, and the replica counts the
+scaling strategy is judged on -- including a permanent snapshot that survives
 Prometheus data retention. See [`docs/benchmark-report.md`](docs/benchmark-report.md).

@@ -35,7 +35,8 @@ benchmark/
     │       └── pd-disaggregation/
     │           ├── baseline.yaml         # control = recommended strategy
     │           ├── queue-aggressive.yaml # variant (<strategy>.yaml)
-    │           └── kv-early.yaml          # variant
+    │           ├── kv-early.yaml          # variant
+    │           └── token-aware.yaml       # variant
     └── cluster-configs/      # swappable backend overlays (--cluster-config), grouped by platform
         ├── k8s/
         │   └── inference-sim.yaml       #   llm-d-inference-sim
@@ -90,7 +91,12 @@ Rules:
   the strategy does — e.g. `queue-aggressive.yaml`, `kv-early.yaml`. The file's
   header comment records the exact delta from `baseline.yaml`.
 - **Change only the `keda:` block** in a variant; keep everything else identical
-  to `baseline.yaml`.
+  to `baseline.yaml`. The one admissible exception is a trigger whose *metric
+  does not exist* under baseline — then add the minimum needed to publish it and
+  say so in the header. `token-aware.yaml` does this: its prefill trigger reads
+  `llm_d_epp_inflight_tokens`, so it adds the EPP `inflight-load-producer`
+  plugin (a producer, referenced from no scheduling profile, so routing is
+  unchanged).
 - **Promote a winner** by copying its `keda:` block back into
   `scenarios/guides/<guide>.yaml`; retire the losing variants.
 

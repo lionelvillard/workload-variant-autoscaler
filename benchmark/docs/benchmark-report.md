@@ -99,15 +99,14 @@ benchmark/hack/benchmark_report.sh configure --prometheus-url http://localhost:9
 ### Why Thanos Querier specifically
 
 On OpenShift, vLLM's `PodMonitor`-scraped metrics live in the
-**user-workload** Prometheus while `kube-state-metrics` (needed for the
-`kube_pod_labels` join -- see "Identifying a session's metrics" below) is
-scraped by the **platform** Prometheus. Those are two separate TSDBs; a
-query can't join across them directly. Thanos Querier merges both, so it's
-the only endpoint where the join panels actually return data. This was
-confirmed by querying each Prometheus directly: `prometheus-operated` in
-`openshift-user-workload-monitoring` has `vllm:*` but zero
-`kube_pod_labels` series, and `prometheus-operated` in
-`openshift-monitoring` has `kube_pod_labels` but zero `vllm:*` series.
+**user-workload** Prometheus while `kube-state-metrics` (which the
+Deployment- and HPA-replica panels query) is scraped by the **platform**
+Prometheus. Those are two separate TSDBs, so neither one alone can serve the
+whole dashboard. Thanos Querier merges both, so it's the only endpoint where
+every panel returns data. This was confirmed by querying each Prometheus
+directly: `prometheus-operated` in `openshift-user-workload-monitoring` has
+`vllm:*` but zero `kube_deployment_*` series, and `prometheus-operated` in
+`openshift-monitoring` has `kube_deployment_*` but zero `vllm:*` series.
 
 ### Alternative: Grafana already running in-cluster (no port-forwarding)
 
@@ -204,69 +203,36 @@ has the data).
 The vLLM metrics this dashboard queries (`vllm:kv_cache_usage_perc`,
 `vllm:num_requests_waiting`, `vllm:num_requests_running`, ... -- see
 [Dashboard panels](#dashboard-panels)) carry only standard labels:
-`namespace` and `pod`. There's no `session_id` on them directly. Every
-"which metrics belong to this session" link -- the session-level
-Observability line and Live dashboard link in the
-[interactive dashboard](interactive-dashboard.md), and the Grafana snapshots
-covered here -- **default** to working around that by scoping the Grafana
-dashboard's `namespace` variable to the session's namespace and time-boxing
-the query to that session's (or that experiment's run's) window. That's
-sufficient as long as **one namespace is used by only one session at a
-time**, which is how the "Start a session" form and the `run-benchmark`
+`namespace` and `pod`. There is no session identifier on them, and nothing
+in the pipeline stamps one: **a session is identified by its namespace plus
+its time window, and by nothing else.** Every "which metrics belong to this
+session" link -- the session-level Observability line and Live dashboard
+link in the [interactive dashboard](interactive-dashboard.md), and the
+Grafana snapshots covered here -- works by scoping the Grafana dashboard's
+`namespace` variable to the session's namespace and time-boxing the query to
+that session's (or that experiment's run's) window. `_live_dashboard_url`
+and `_capture_snapshot` in `benchmark/hack/benchmark_report.py` thread
+exactly those two things through, and `$namespace` is the only variable a
+panel query may reference (see [Extending the
+dashboard](#extending-the-dashboard)).
+
+That is sufficient as long as **one namespace is used by only one session at
+a time**, which is how the "Start a session" form and the `run-benchmark`
 skill both work in practice (a fresh namespace, or an intentionally reused
-one you tear down before reusing).
+one you tear down before reusing). It breaks down if two sessions overlap in
+the same namespace, or if a namespace is reused enough that retention no
+longer cleanly separates their time windows -- in those cases the panels
+show both sessions' pods and there is no way to tell them apart.
 
-It breaks down if two sessions ever overlap in the same namespace, or if a
-namespace is reused enough that retention no longer cleanly separates their
-time windows. For that case, the sibling `llm-d-benchmark` clone's harness
-and serving pod templates now stamp a `llmdbench.ai/session-id: <session-id>`
-label on the pods that produce these metrics (`config/templates/jinja/13_ms-values.yaml.j2`,
-`14_standalone-deployment_yaml.j2`, `20_harness_pod.yaml.j2`), where
-`<session-id>` is the llmdbenchmark workspace/session directory name (e.g.
-`<user>-<timestamp>`) -- the same value used as the session ID everywhere
-else in this dashboard. `session_id` is also a dashboard template variable
-here (`benchmark/config/grafana/dashboard.json`) and is threaded through
-`_live_dashboard_url`/`_capture_snapshot` in `benchmark/hack/benchmark_report.py`
-the same way `namespace` is, so every generated link already carries
-`var-session_id=<id>` and every snapshot's queries have `$session_id`
-substituted.
-
-Every `vllm:*` panel joins onto the vLLM metrics via `kube_state_metrics`'s
-`kube_pod_labels`, e.g.:
-
-```
-max by (pod, namespace, engine) (vllm:kv_cache_usage_perc{namespace=~"$namespace"})
-  * on (namespace) group_left()
-    max by (namespace) (kube_pod_labels{namespace=~"$namespace",
-                                        label_llmdbench_ai_session_id=~"$session_id"})
-```
-
-**The join resolves a session to its namespace; it does not match pod for
-pod.** That is deliberate, and the earlier pod-level form was wrong in
-practice. The label is stamped at **standup**, so a session that only *runs*
-against an already-stood-up stack labels nothing but its own harness pod: the
-decode/prefill pods still carry the standup session's ID. Matching
-`on (pod, namespace)` then returned zero series for the run session's ID --
-every vLLM panel went blank for a perfectly valid selection. Verified live:
-picking run session `villardl-20260909-132550-010` in
-`lionel-bench-model-sim-32b-pd-token` matched nothing under the old form and
-matches all 29 vLLM targets under this one.
-
-`max by (namespace)` collapses the right-hand side to one series per
-namespace, so the gate reads "this namespace had a pod belonging to the
-selected session at this instant". Consequences worth knowing:
-
-- Selecting a session ID from a *different* namespace still yields nothing,
-  so it filters rather than being a no-op (verified).
-- Because a harness pod only exists while its run is in flight, gating on a
-  run-only session ID also time-boxes the panels to that run -- outside the
-  window the gate is empty. Gating on the standup session's ID spans the
-  whole stack lifetime.
-- Two sessions overlapping in one namespace can no longer be separated. They
-  never could: their serving pods share one standup ID and the router pod
-  carries none at all.
-- It also removes the many-to-many hazard described below, since the
-  right-hand side is unique per namespace by construction.
+> **Deprecated:** earlier revisions gated every `vllm:*` panel on a
+> `kube_pod_labels{label_llmdbench_ai_session_id=~"$session_id"}` join,
+> against a `llmdbench.ai/session-id` pod label stamped by the sibling
+> `llm-d-benchmark` clone's pod templates. That label was never adopted
+> upstream, so the join matched nothing useful and the `session_id`
+> dashboard variable had no values to offer. Both the variable and the join
+> are gone; the panels are plain namespace-scoped queries now. Nothing else
+> about the dashboard changed -- the join was a multiply-by-1 no-op at its
+> default `session_id=.*` anyway.
 
 **Why the `max by (...)` wrapper:** an llm-d serving pod is typically scraped
 *twice* -- once by the guide's PodMonitor and once by the modelservice
@@ -279,68 +245,14 @@ keeping `engine` in the grouping preserves per-engine series for
 data-parallel deployments. The replica-count panel groups by `(pod,
 namespace)` only, since it counts pods rather than engines.
 
-To see which pods a session actually labelled, query
-`kube_pod_labels{namespace="<ns>"}` and read
-`label_llmdbench_ai_session_id` per pod.
-
-`kube_pod_labels` carries one series per pod regardless of whether
-`label_llmdbench_ai_session_id` is populated -- kube-state-metrics emits the
-base metric (`pod`, `namespace`, `uid`) unconditionally, and only attaches
-the `label_llmdbench_ai_session_id` dimension if that pod label is in its
-`--metric-labels-allowlist`. **OpenShift's built-in cluster-monitoring
-kube-state-metrics ships with `--metric-labels-allowlist=pods=[*]`** (every
-pod label, confirmed on a live OCP cluster), so this works with zero extra
-config there. A manually-installed `kube-prometheus-stack` (e.g. the "local
-Kind" path earlier in this doc) doesn't allowlist custom labels by default --
-set `--metric-labels-allowlist=pods=[llmdbench.ai/session-id]`, or the
-chart's `kube-state-metrics.metricLabelsAllowlist` equivalent, to enable it
-there. Either way, with the default `session_id=.*` the join is a no-op
-multiply-by-1: panels render identically whether or not the allowlist is
-configured. Setting `session_id` to one session's actual ID only filters
-correctly once the allowlist is enabled -- without it, the label is simply
-absent from every series, so a specific (non-`.*`) value matches nothing
-and the panels go blank. That's the tell that the allowlist isn't set, not
-a bug.
-
-**Both sides of the join are still scoped to `$namespace`.** `kube_pod_labels`
-is cluster-wide (every namespace, every pod, on a shared Prometheus this can
-be thousands of series), so scoping the right-hand side keeps the join cheap
-and its result small.
-
-Historically it was also load-bearing for correctness: with a `on (pod,
-namespace)` match group, one unrelated pod anywhere in the cluster
-transiently carrying two label sets (mid-rollout, before the stale series
-drops out) made Prometheus reject the *entire* query with `"many-to-many
-matching not allowed"` -- observed live against a real OpenShift cluster's
-shared Prometheus. The `max by (namespace)` form is immune by construction,
-since it emits exactly one series per namespace, but keeping the scope costs
-nothing and bounds the work.
-
-Once the allowlist is configured, scope any panel (or an ad-hoc Explore
-query) to one session by setting the dashboard's `session_id` variable, or
-by appending the same join to a new PromQL expression -- always scoped to
-`namespace=~"$namespace"` on the `kube_pod_labels` side for the reason
-above.
-
-**`session_id` only applies to the `vllm:*` panels.** The join keys on
-`(pod, namespace)`, so it can only filter series that a session-labelled pod
-produced. It doesn't apply to:
-
-- **EPP metrics** -- the router pod isn't stamped with
-  `llmdbench.ai/session-id` (the templates above cover serving and harness
-  pods only), and two sessions sharing a namespace would share one router
-  anyway, so the series are not separable even in principle.
-- **kube-state-metrics** (`kube_deployment_*`, `kube_horizontalpodautoscaler_*`)
-  -- these describe objects, not pods.
-- **KEDA and WVA metrics** -- emitted by controllers that live in their own
-  namespaces. Their `namespace` label (the *target's* namespace) collides
-  with the scrape target's, so Prometheus renames it to `exported_namespace`;
-  those panels match `{exported_namespace=~"$namespace"} or
-  {namespace=~"$namespace"}` so they work either way.
-
-Those panels are scoped by `$namespace` and the time window only. With the
-one-namespace-per-session convention that is exactly as precise as the
-`vllm:*` panels; only in a shared namespace do they stay broader.
+**Not every panel's `namespace` label means the same thing.** KEDA and WVA
+metrics are emitted by controllers living in their own namespaces, so the
+*target's* namespace collides with the scrape target's and Prometheus renames
+it to `exported_namespace`; those panels match
+`{exported_namespace=~"$namespace"} or {namespace=~"$namespace"}` so they
+work either way. The `kube_deployment_*` / `kube_horizontalpodautoscaler_*`
+panels describe objects rather than pods, but their `namespace` is the
+object's, so `$namespace` scopes them correctly as-is.
 
 ## Dashboard panels
 
@@ -404,11 +316,11 @@ capture time. Two constraints come from `_capture_snapshot`, which replays
 each target's `expr` against Prometheus itself rather than letting Grafana
 render it:
 
-1. **Only `$namespace` and `$session_id` may appear in an expression.** Those
-   are the two variables it substitutes; any other dashboard variable reaches
-   Prometheus unexpanded and the query fails (the snapshot warns and that
-   panel freezes empty). Grafana leaves `$1`-style `label_replace` capture
-   groups alone, so those are safe.
+1. **Only `$namespace` may appear in an expression.** It is the one variable
+   it substitutes; any other dashboard variable reaches Prometheus unexpanded
+   and the query fails (the snapshot warns and that panel freezes empty).
+   Grafana leaves `$1`-style `label_replace` capture groups alone, so those
+   are safe.
 2. **Use literal range durations, not `$__rate_interval` / `$__interval`.**
    Those macros are expanded by Grafana at render time, not by the snapshot
    path. The shipped panels use `[2m]` for counter rates and `[5m]` for

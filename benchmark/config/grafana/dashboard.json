@@ -17,7 +17,7 @@
   "graphTooltip": 1,
   "id": null,
   "links": [],
-  "description": "Per-run view of a benchmark session: vLLM engine metrics, llm-d EPP (router) metrics, and the replica counts every autoscaling experiment is judged on. Two conventions: (1) panel queries may only reference the $namespace and $session_id variables and must use literal range durations (no $__rate_interval), because benchmark_report.py's snapshot capture substitutes exactly those two variables and sends the expression to Prometheus verbatim; (2) every vllm: query is wrapped in `max by (pod, namespace, engine)` so that pods scraped by both a PodMonitor and a ServiceMonitor -- the usual llm-d layout -- are counted once, and gated on `max by (namespace) (kube_pod_labels{...})` so that $session_id selects the namespace a session ran in rather than matching pod-for-pod. See benchmark/docs/benchmark-report.md.",
+  "description": "Per-run view of a benchmark session: vLLM engine metrics, llm-d EPP (router) metrics, and the replica counts every autoscaling experiment is judged on. Two conventions: (1) panel queries may only reference the $namespace variable and must use literal range durations (no $__rate_interval), because benchmark_report.py's snapshot capture substitutes exactly that variable and sends the expression to Prometheus verbatim; (2) every vllm: query is wrapped in `max by (pod, namespace, engine)` so that pods scraped by both a PodMonitor and a ServiceMonitor -- the usual llm-d layout -- are counted once. A session is identified by its namespace plus the run's time window; there is no session-id pod label. See benchmark/docs/benchmark-report.md.",
   "panels": [
     {
       "id": 100,
@@ -61,12 +61,12 @@
       },
       "targets": [
         {
-          "expr": "max by (pod, namespace, engine) (vllm:kv_cache_usage_perc{namespace=~\"$namespace\"}) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})",
+          "expr": "max by (pod, namespace, engine) (vllm:kv_cache_usage_perc{namespace=~\"$namespace\"})",
           "legendFormat": "{{pod}}",
           "refId": "A"
         },
         {
-          "expr": "avg(max by (pod, namespace, engine) (vllm:kv_cache_usage_perc{namespace=~\"$namespace\"}) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}))",
+          "expr": "avg(max by (pod, namespace, engine) (vllm:kv_cache_usage_perc{namespace=~\"$namespace\"}))",
           "legendFormat": "avg",
           "refId": "B"
         }
@@ -98,12 +98,12 @@
       },
       "targets": [
         {
-          "expr": "max by (pod, namespace, engine) (vllm:num_requests_waiting{namespace=~\"$namespace\"}) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})",
+          "expr": "max by (pod, namespace, engine) (vllm:num_requests_waiting{namespace=~\"$namespace\"})",
           "legendFormat": "{{pod}} waiting",
           "refId": "A"
         },
         {
-          "expr": "max by (pod, namespace, engine) (vllm:num_requests_running{namespace=~\"$namespace\"}) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})",
+          "expr": "max by (pod, namespace, engine) (vllm:num_requests_running{namespace=~\"$namespace\"})",
           "legendFormat": "{{pod}} running",
           "refId": "B"
         }
@@ -135,17 +135,17 @@
       },
       "targets": [
         {
-          "expr": "sum(max by (pod, namespace, engine) (vllm:num_requests_running{namespace=~\"$namespace\"}) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}))",
+          "expr": "sum(max by (pod, namespace, engine) (vllm:num_requests_running{namespace=~\"$namespace\"}))",
           "legendFormat": "running (fleet)",
           "refId": "A"
         },
         {
-          "expr": "sum(max by (pod, namespace, engine) (vllm:num_requests_waiting{namespace=~\"$namespace\"}) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}))",
+          "expr": "sum(max by (pod, namespace, engine) (vllm:num_requests_waiting{namespace=~\"$namespace\"}))",
           "legendFormat": "waiting (fleet)",
           "refId": "B"
         },
         {
-          "expr": "avg(max by (pod, namespace, engine) (vllm:num_requests_waiting{namespace=~\"$namespace\"}) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}))",
+          "expr": "avg(max by (pod, namespace, engine) (vllm:num_requests_waiting{namespace=~\"$namespace\"}))",
           "legendFormat": "waiting (avg per pod)",
           "refId": "C"
         }
@@ -177,7 +177,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (reason) (max by (pod, namespace, engine, reason) (vllm:num_requests_waiting_by_reason{namespace=~\"$namespace\"}) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}))",
+          "expr": "sum by (reason) (max by (pod, namespace, engine, reason) (vllm:num_requests_waiting_by_reason{namespace=~\"$namespace\"}))",
           "legendFormat": "{{reason}}",
           "refId": "A"
         }
@@ -209,12 +209,12 @@
       },
       "targets": [
         {
-          "expr": "sum(max by (pod, namespace, engine) (rate(vllm:num_preemptions_total{namespace=~\"$namespace\"}[2m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}))",
+          "expr": "sum(max by (pod, namespace, engine) (rate(vllm:num_preemptions_total{namespace=~\"$namespace\"}[2m])))",
           "legendFormat": "preemptions/s (fleet)",
           "refId": "A"
         },
         {
-          "expr": "max by (pod, namespace, engine) (rate(vllm:num_preemptions_total{namespace=~\"$namespace\"}[2m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})",
+          "expr": "max by (pod, namespace, engine) (rate(vllm:num_preemptions_total{namespace=~\"$namespace\"}[2m]))",
           "legendFormat": "{{pod}}",
           "refId": "B"
         }
@@ -247,12 +247,12 @@
       },
       "targets": [
         {
-          "expr": "sum(max by (pod, namespace, engine) (rate(vllm:prefix_cache_hits_total{namespace=~\"$namespace\"}[2m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})) / sum(max by (pod, namespace, engine) (rate(vllm:prefix_cache_queries_total{namespace=~\"$namespace\"}[2m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}))",
+          "expr": "sum(max by (pod, namespace, engine) (rate(vllm:prefix_cache_hits_total{namespace=~\"$namespace\"}[2m]))) / sum(max by (pod, namespace, engine) (rate(vllm:prefix_cache_queries_total{namespace=~\"$namespace\"}[2m])))",
           "legendFormat": "local",
           "refId": "A"
         },
         {
-          "expr": "sum(max by (pod, namespace, engine) (rate(vllm:external_prefix_cache_hits_total{namespace=~\"$namespace\"}[2m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})) / sum(max by (pod, namespace, engine) (rate(vllm:external_prefix_cache_queries_total{namespace=~\"$namespace\"}[2m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}))",
+          "expr": "sum(max by (pod, namespace, engine) (rate(vllm:external_prefix_cache_hits_total{namespace=~\"$namespace\"}[2m]))) / sum(max by (pod, namespace, engine) (rate(vllm:external_prefix_cache_queries_total{namespace=~\"$namespace\"}[2m])))",
           "legendFormat": "external (KV connector)",
           "refId": "B"
         }
@@ -292,12 +292,12 @@
       },
       "targets": [
         {
-          "expr": "sum(max by (pod, namespace, engine) (rate(vllm:prompt_tokens_total{namespace=~\"$namespace\"}[2m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}))",
+          "expr": "sum(max by (pod, namespace, engine) (rate(vllm:prompt_tokens_total{namespace=~\"$namespace\"}[2m])))",
           "legendFormat": "prompt tokens/s",
           "refId": "A"
         },
         {
-          "expr": "sum(max by (pod, namespace, engine) (rate(vllm:generation_tokens_total{namespace=~\"$namespace\"}[2m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}))",
+          "expr": "sum(max by (pod, namespace, engine) (rate(vllm:generation_tokens_total{namespace=~\"$namespace\"}[2m])))",
           "legendFormat": "generation tokens/s",
           "refId": "B"
         }
@@ -329,7 +329,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (finished_reason) (max by (pod, namespace, engine, finished_reason) (rate(vllm:request_success_total{namespace=~\"$namespace\"}[2m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}))",
+          "expr": "sum by (finished_reason) (max by (pod, namespace, engine, finished_reason) (rate(vllm:request_success_total{namespace=~\"$namespace\"}[2m])))",
           "legendFormat": "{{finished_reason}}",
           "refId": "A"
         }
@@ -361,17 +361,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:time_to_first_token_seconds_bucket{namespace=~\"$namespace\"}[5m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})))",
+          "expr": "histogram_quantile(0.5, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:time_to_first_token_seconds_bucket{namespace=~\"$namespace\"}[5m]))))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:time_to_first_token_seconds_bucket{namespace=~\"$namespace\"}[5m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})))",
+          "expr": "histogram_quantile(0.95, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:time_to_first_token_seconds_bucket{namespace=~\"$namespace\"}[5m]))))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:time_to_first_token_seconds_bucket{namespace=~\"$namespace\"}[5m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})))",
+          "expr": "histogram_quantile(0.99, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:time_to_first_token_seconds_bucket{namespace=~\"$namespace\"}[5m]))))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -403,17 +403,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:inter_token_latency_seconds_bucket{namespace=~\"$namespace\"}[5m]) or rate(vllm:time_per_output_token_seconds_bucket{namespace=~\"$namespace\"}[5m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})))",
+          "expr": "histogram_quantile(0.5, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:inter_token_latency_seconds_bucket{namespace=~\"$namespace\"}[5m]) or rate(vllm:time_per_output_token_seconds_bucket{namespace=~\"$namespace\"}[5m]))))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:inter_token_latency_seconds_bucket{namespace=~\"$namespace\"}[5m]) or rate(vllm:time_per_output_token_seconds_bucket{namespace=~\"$namespace\"}[5m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})))",
+          "expr": "histogram_quantile(0.95, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:inter_token_latency_seconds_bucket{namespace=~\"$namespace\"}[5m]) or rate(vllm:time_per_output_token_seconds_bucket{namespace=~\"$namespace\"}[5m]))))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:inter_token_latency_seconds_bucket{namespace=~\"$namespace\"}[5m]) or rate(vllm:time_per_output_token_seconds_bucket{namespace=~\"$namespace\"}[5m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})))",
+          "expr": "histogram_quantile(0.99, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:inter_token_latency_seconds_bucket{namespace=~\"$namespace\"}[5m]) or rate(vllm:time_per_output_token_seconds_bucket{namespace=~\"$namespace\"}[5m]))))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -445,17 +445,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:e2e_request_latency_seconds_bucket{namespace=~\"$namespace\"}[5m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})))",
+          "expr": "histogram_quantile(0.5, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:e2e_request_latency_seconds_bucket{namespace=~\"$namespace\"}[5m]))))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:e2e_request_latency_seconds_bucket{namespace=~\"$namespace\"}[5m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})))",
+          "expr": "histogram_quantile(0.95, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:e2e_request_latency_seconds_bucket{namespace=~\"$namespace\"}[5m]))))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:e2e_request_latency_seconds_bucket{namespace=~\"$namespace\"}[5m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})))",
+          "expr": "histogram_quantile(0.99, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:e2e_request_latency_seconds_bucket{namespace=~\"$namespace\"}[5m]))))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -487,17 +487,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:request_queue_time_seconds_bucket{namespace=~\"$namespace\"}[5m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})))",
+          "expr": "histogram_quantile(0.5, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:request_queue_time_seconds_bucket{namespace=~\"$namespace\"}[5m]))))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:request_queue_time_seconds_bucket{namespace=~\"$namespace\"}[5m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})))",
+          "expr": "histogram_quantile(0.95, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:request_queue_time_seconds_bucket{namespace=~\"$namespace\"}[5m]))))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:request_queue_time_seconds_bucket{namespace=~\"$namespace\"}[5m])) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"})))",
+          "expr": "histogram_quantile(0.99, sum by (le) (max by (pod, namespace, engine, le) (rate(vllm:request_queue_time_seconds_bucket{namespace=~\"$namespace\"}[5m]))))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -515,7 +515,7 @@
     {
       "id": 13,
       "title": "Serving Replicas by Role",
-      "description": "Replicas counted from the metrics themselves: one count per pod actually scraped, deduplicated with `max by (pod, namespace)` so a pod covered by both a PodMonitor and a ServiceMonitor isn't counted twice. Backend- and workload-API-agnostic (Deployment, LeaderWorkerSet, standalone), and the only replica panel that honours $session_id (as a namespace gate -- see the Session ID variable's description). Role comes from the pod name (`*-prefill-*` / `*-decode-*`); anything else counts as 'aggregated'.",
+      "description": "Replicas counted from the metrics themselves: one count per pod actually scraped, deduplicated with `max by (pod, namespace)` so a pod covered by both a PodMonitor and a ServiceMonitor isn't counted twice. Backend- and workload-API-agnostic (Deployment, LeaderWorkerSet, standalone). Role comes from the pod name (`*-prefill-*` / `*-decode-*`); anything else counts as 'aggregated'.",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 51 },
       "datasource": { "type": "prometheus" },
@@ -539,12 +539,12 @@
       },
       "targets": [
         {
-          "expr": "count by (role) (label_replace(label_replace(max by (pod, namespace) (vllm:num_requests_running{namespace=~\"$namespace\"}) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}), \"role\", \"aggregated\", \"pod\", \".*\"), \"role\", \"$1\", \"pod\", \".*-(prefill|decode)-.*\"))",
+          "expr": "count by (role) (label_replace(label_replace(max by (pod, namespace) (vllm:num_requests_running{namespace=~\"$namespace\"}), \"role\", \"aggregated\", \"pod\", \".*\"), \"role\", \"$1\", \"pod\", \".*-(prefill|decode)-.*\"))",
           "legendFormat": "{{role}}",
           "refId": "A"
         },
         {
-          "expr": "count(max by (pod, namespace) (vllm:num_requests_running{namespace=~\"$namespace\"}) * on (namespace) group_left() max by (namespace) (kube_pod_labels{namespace=~\"$namespace\", label_llmdbench_ai_session_id=~\"$session_id\"}))",
+          "expr": "count(max by (pod, namespace) (vllm:num_requests_running{namespace=~\"$namespace\"}))",
           "legendFormat": "all serving pods",
           "refId": "B"
         }
@@ -554,7 +554,7 @@
     {
       "id": 14,
       "title": "Deployment Replicas (kube-state-metrics)",
-      "description": "Ground truth for what the autoscaler asked for (spec) versus what is serving (available). The gap is scale-up latency -- image pull + model load -- which is why a run's throughput lags its replica count. Namespace- and time-scoped only; $session_id does not apply (see benchmark-report.md).",
+      "description": "Ground truth for what the autoscaler asked for (spec) versus what is serving (available). The gap is scale-up latency -- image pull + model load -- which is why a run's throughput lags its replica count. Namespace- and time-scoped, like every panel on this dashboard (see benchmark-report.md).",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 51 },
       "datasource": { "type": "prometheus" },
@@ -836,7 +836,7 @@
     {
       "id": 19,
       "title": "EPP Pool KV Cache Utilization",
-      "description": "The router's pool-wide KV view (average across endpoints, plus its spread). A large std dev means load is unevenly distributed, so the pool average understates how close individual replicas are to saturation. Panels in this row are namespace- and time-scoped only: $session_id does not apply, because EPP pods do not carry the llmdbench.ai/session-id label.",
+      "description": "The router's pool-wide KV view (average across endpoints, plus its spread). A large std dev means load is unevenly distributed, so the pool average understates how close individual replicas are to saturation.",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 84 },
       "datasource": { "type": "prometheus" },
@@ -1234,20 +1234,6 @@
         "label": "Namespace",
         "datasource": { "type": "prometheus" },
         "query": { "query": "label_values(vllm:num_requests_running, namespace)", "refId": "namespace" },
-        "refresh": 2,
-        "sort": 1,
-        "multi": true,
-        "includeAll": true,
-        "allValue": ".*",
-        "current": { "value": "$__all", "text": "All" }
-      },
-      {
-        "name": "session_id",
-        "type": "query",
-        "label": "Session ID",
-        "description": "llmdbench.ai/session-id pod label, resolved to the namespace(s) where that session had pods and used to gate the vLLM panels (see docs/benchmark-report.md). Defaults to All (no filtering). Namespace resolution rather than pod matching is deliberate: the label is stamped at standup, so a session that only ran against an already-stood-up stack labels just its harness pod -- matching pod-for-pod would blank every panel. Only the vLLM panels key off it; EPP, KEDA, WVA and kube-state-metrics series stay namespace- and time-scoped.",
-        "datasource": { "type": "prometheus" },
-        "query": { "query": "label_values(kube_pod_labels{namespace=~\"$namespace\"}, label_llmdbench_ai_session_id)", "refId": "session_id" },
         "refresh": 2,
         "sort": 1,
         "multi": true,
